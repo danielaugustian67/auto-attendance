@@ -1,0 +1,7 @@
+# Rahasia & sesi login
+.env
+storage_state/
+
+# Hasil build
+/bin/
+/bot
