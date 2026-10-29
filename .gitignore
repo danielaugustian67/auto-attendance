@@ -1,6 +1,9 @@
 # Rahasia & sesi login
 .env
 storage_state/
+*.db
+*.db-shm
+*.db-wal
 
 # Hasil build
 /bin/

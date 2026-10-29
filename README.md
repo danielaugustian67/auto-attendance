@@ -1,6 +1,6 @@
 # 🤖 MagangHub Auto-Attendance & AI Logbook Bot
 
-Sistem otomasi presensi dan pengisian *logbook* harian untuk platform **Monev MagangHub Kemnaker** ([monev.maganghub.kemnaker.go.id](https://monev.maganghub.kemnaker.go.id)) berbasis chat bot (Telegram / WhatsApp) yang terintegrasi dengan **9Router AI**, ditulis dalam **Go** agar ringan dijalankan di VPS (satu binary, ~10–20 MB RAM saat idle).
+Sistem otomasi presensi dan pengisian *logbook* harian untuk platform **Monev MagangHub Kemnaker** ([monev.maganghub.kemnaker.go.id](https://monev.maganghub.kemnaker.go.id)) berbasis chat bot (Telegram / WhatsApp) yang terintegrasi dengan **9Router AI**, ditulis dalam **Go** agar ringan dijalankan di VPS (satu binary statis tanpa cgo, RAM idle puluhan MB).
 
 ---
 
@@ -52,11 +52,14 @@ auto-attendance/
 ├── README.md
 ├── go.mod / go.sum
 ├── .env.example               # Contoh environment variables
-├── storage_state/             # Sesi login SIAPkerja (persistent, tidak di-commit)
+├── storage_state/             # Sesi WhatsApp & SIAPkerja (persistent, tidak di-commit)
 ├── cmd/bot/main.go            # Entry point aplikasi
 └── internal/
     ├── config/config.go       # Validasi dan konfigurasi env
-    ├── bot/bot.go             # Handler Telegram + state machine chat
+    ├── bot/
+    │   ├── flow.go            # State machine chat, tidak bergantung channel
+    │   ├── telegram.go        # Adapter Telegram (tombol inline)
+    │   └── whatsapp.go        # Adapter WhatsApp via whatsmeow (balasan 1/2/3)
     ├── ai/
     │   ├── client.go          # Client OpenAI-compatible ke 9Router (net/http, tanpa SDK)
     │   └── prompt.go          # System prompt, struct & validasi logbook
@@ -64,24 +67,34 @@ auto-attendance/
     └── scheduler/scheduler.go # Pengingat jadwal harian (cron, zona Asia/Jakarta)
 ```
 
-Dependensi: `go-telegram/bot` (tanpa dependensi turunan), `robfig/cron/v3`, `joho/godotenv`.
+Dependensi utama: `go-telegram/bot`, `go.mau.fi/whatsmeow`, `modernc.org/sqlite` (SQLite pure Go untuk sesi WA), `robfig/cron/v3`, `joho/godotenv`.
 
 ---
 
 ## ▶️ Menjalankan
 
 ```bash
-cp .env.example .env   # lalu isi token & ID Telegram
+cp .env.example .env   # isi minimal satu channel: Telegram dan/atau WhatsApp
 go run ./cmd/bot
 ```
 
 Build untuk VPS Linux (dari Mac pun bisa, hasilnya satu file):
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/bot ./cmd/bot
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/bot ./cmd/bot
 ```
 
-Perintah bot: `/isi` mulai isi logbook, `/status` cek status hari ini, `/batal` batalkan draf. Teks yang dikirim saat draf tampil dianggap instruksi revisi.
+Telegram dan WhatsApp bisa aktif bersamaan. Keduanya memakai satu draf yang sama: pengingat dikirim ke semua channel aktif, dan balasan dikirim ke channel tempat kamu mengetik.
+
+Perintah (di WhatsApp boleh tanpa `/`): `isi` mulai isi logbook, `status` cek status hari ini, `batal` batalkan draf. Saat draf tampil, pilih Kirim/Revisi/Batal (tombol di Telegram, balas `1`/`2`/`3` di WhatsApp) atau langsung ketik instruksi revisi.
+
+### 📱 WhatsApp (whatsmeow)
+
+> ⚠️ whatsmeow adalah klien WhatsApp **tidak resmi**. Nomor yang dipakai bot berisiko diblokir, jadi gunakan **nomor kedua** untuk bot, bukan nomor utama.
+
+- `WA_ALLOWED_NUMBER` adalah nomor **kamu** (satu-satunya yang dilayani). Nomor bot harus berbeda.
+- Login pertama kali: jalankan bot di terminal, lalu scan QR yang muncul dari HP nomor bot (*Perangkat tertaut > Tautkan perangkat*). Di VPS tanpa layar, isi `WA_BOT_NUMBER` untuk mendapat **kode tautan 8 karakter** di log sebagai ganti QR.
+- Sesi tersimpan di `WA_SESSION_DB` (default `storage_state/whatsapp.db`), jadi restart tidak perlu login lagi. Bila logout dari HP, hapus file itu lalu login ulang.
 
 > Catatan: status "sudah terkirim hari ini" masih disimpan di memori, jadi hilang bila bot di-restart.
 
@@ -109,9 +122,15 @@ Diberikan catatan singkat kegiatan pengguna, ubah menjadi format JSON:
 ## ⚙️ Variabel Lingkungan (`.env`)
 
 ```ini
-# Bot Configuration
+# Telegram (aktif bila token diisi)
 TELEGRAM_BOT_TOKEN="your_telegram_bot_token"
 TELEGRAM_ALLOWED_USER_ID="your_telegram_numeric_id"
+
+# WhatsApp via whatsmeow
+WA_ENABLED=false
+WA_ALLOWED_NUMBER="081234567890"   # nomor KAMU; 08xx otomatis jadi 628xx
+WA_BOT_NUMBER=""                   # opsional: nomor bot, untuk login pakai kode tautan
+WA_SESSION_DB="storage_state/whatsapp.db"
 
 # 9Router AI Gateway Configuration
 ROUTER_BASE_URL="http://localhost:20128/v1"
@@ -138,8 +157,9 @@ TZ_LOCATION="Asia/Jakarta"
   - Petakan request Monev lewat DevTools > Network (Fetch/XHR) saat menyimpan logbook.
   - Jika ada API JSON: implementasikan `monev.Submitter` dengan HTTP biasa + simpan token sesi.
   - Jika tidak: browser headless on-demand (`chromedp`), hanya hidup saat submit.
-- [x] **Fase 3: Integrasi Bot Telegram**
+- [x] **Fase 3: Integrasi Bot Telegram & WhatsApp**
   - State machine chat: *Tanya Kegiatan -> AI Draft -> Konfirmasi/Revisi -> Eksekusi*.
+  - [ ] Uji langsung dengan akun Telegram & nomor WA sungguhan.
 - [ ] **Fase 4: Penjadwalan & Testing**
   - [x] Cron pengingat 17:00 & 21:00 WIB (dilewati jika sudah terkirim).
   - [ ] Uji coba akhir (end-to-end test).
