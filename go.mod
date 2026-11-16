@@ -3,6 +3,8 @@ module auto-attendance
 go 1.27.3
 
 require (
+	github.com/chromedp/cdproto v0.158.6
+	github.com/chromedp/chromedp v0.21.0
 	github.com/go-telegram/bot v1.27.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mdp/qrterminal/v3 v3.2.1
@@ -19,6 +21,7 @@ require (
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/elliotchance/orderedmap/v3 v3.1.0 // indirect
+	github.com/go-json-experiment/json v0.0.0-20260213210345-44df1a37e875 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

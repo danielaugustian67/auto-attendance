@@ -63,7 +63,11 @@ func (s *fakeSubmitter) Submit(context.Context, time.Time, ai.Logbook) (monev.Re
 func newTestFlow(t *testing.T, sub monev.Submitter) *Flow {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		content, _ := json.Marshal(ai.Logbook{Aktivitas: strings.Repeat("a", ai.MinAktivitasChars), Pembelajaran: "p", Kendala: "k"})
+		content, _ := json.Marshal(ai.Logbook{
+			Aktivitas:    strings.Repeat("a", ai.MinFieldChars),
+			Pembelajaran: strings.Repeat("p", ai.MinFieldChars),
+			Kendala:      strings.Repeat("k", ai.MinFieldChars),
+		})
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": string(content)}}},
 		})

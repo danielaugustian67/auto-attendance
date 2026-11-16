@@ -28,8 +28,12 @@ type Config struct {
 	RouterAPIKey  string
 	AIModel       string
 
+	// Kredensial SIAPkerja; bila kosong, bot hanya menyusun draf tanpa mengirim ke Monev.
 	SiapkerjaEmail    string
 	SiapkerjaPassword string
+	Headless          bool
+	ChromePath        string // opsional; kosong = cari Chrome/Chromium otomatis
+	BrowserProfileDir string
 
 	// ReminderTimes berformat "HH:MM", dievaluasi di zona Location.
 	ReminderTimes []string
@@ -56,12 +60,11 @@ func Load() (*Config, error) {
 		RouterBaseURL:     strings.TrimRight(getenv("ROUTER_BASE_URL", "http://localhost:20128/v1"), "/"),
 		RouterAPIKey:      os.Getenv("ROUTER_API_KEY"),
 		AIModel:           getenv("AI_MODEL_NAME", "gpt-4o-mini"),
-		SiapkerjaEmail:    os.Getenv("SIAPKERJA_EMAIL"),
+		SiapkerjaEmail:    strings.TrimSpace(os.Getenv("SIAPKERJA_EMAIL")),
 		SiapkerjaPassword: os.Getenv("SIAPKERJA_PASSWORD"),
-	}
-
-	if cfg.TelegramToken == "" && !cfg.WAEnabled {
-		errs = append(errs, errors.New("aktifkan minimal satu channel: isi TELEGRAM_BOT_TOKEN dan/atau WA_ENABLED=true"))
+		Headless:          !strings.EqualFold(getenv("HEADLESS", "true"), "false"),
+		ChromePath:        strings.TrimSpace(os.Getenv("CHROME_PATH")),
+		BrowserProfileDir: getenv("BROWSER_PROFILE_DIR", "storage_state/chrome"),
 	}
 
 	if cfg.TelegramToken != "" {
@@ -98,6 +101,19 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// RequireChannel memastikan minimal satu channel chat aktif (tidak dibutuhkan untuk -cek-login).
+func (c *Config) RequireChannel() error {
+	if c.TelegramToken == "" && !c.WAEnabled {
+		return errors.New("aktifkan minimal satu channel: isi TELEGRAM_BOT_TOKEN dan/atau WA_ENABLED=true")
+	}
+	return nil
+}
+
+// HasMonevCredentials melaporkan apakah pengiriman otomatis ke Monev bisa diaktifkan.
+func (c *Config) HasMonevCredentials() bool {
+	return c.SiapkerjaEmail != "" && c.SiapkerjaPassword != ""
 }
 
 // NormalizePhone membuang karakter non-digit dan mengubah awalan 0 menjadi 62 (Indonesia).

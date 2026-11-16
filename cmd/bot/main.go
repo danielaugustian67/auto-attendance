@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"golang.org/x/sync/errgroup"
@@ -17,6 +19,9 @@ import (
 )
 
 func main() {
+	checkLogin := flag.Bool("cek-login", false, "hanya uji login SIAPkerja/Monev lalu simpan screenshot, tanpa mengirim apa pun")
+	flag.Parse()
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("konfigurasi tidak valid:\n%v", err)
@@ -25,10 +30,33 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	browser := &monev.Browser{
+		Email:      cfg.SiapkerjaEmail,
+		Password:   cfg.SiapkerjaPassword,
+		ProfileDir: cfg.BrowserProfileDir,
+		ExecPath:   cfg.ChromePath,
+		Headless:   cfg.Headless,
+		Location:   cfg.Location,
+	}
+
+	if *checkLogin {
+		runCheckLogin(ctx, browser, filepath.Join(filepath.Dir(cfg.BrowserProfileDir), "cek-login.png"))
+		return
+	}
+
+	if err := cfg.RequireChannel(); err != nil {
+		log.Fatalf("konfigurasi tidak valid:\n%v", err)
+	}
+
 	aiClient := ai.NewClient(cfg.RouterBaseURL, cfg.RouterAPIKey, cfg.AIModel)
 
-	// TODO: ganti dengan implementasi API/browser setelah alur Monev dipetakan.
-	var sub monev.Submitter = monev.Unimplemented{}
+	var sub monev.Submitter = monev.Disabled{}
+	if cfg.HasMonevCredentials() {
+		sub = browser
+		log.Print("monev: pengiriman otomatis aktif (browser headless)")
+	} else {
+		log.Print("monev: SIAPKERJA_EMAIL/PASSWORD kosong, bot hanya menyusun draf")
+	}
 
 	flow := bot.NewFlow(aiClient, sub, cfg.Location)
 	g, ctx := errgroup.WithContext(ctx)
@@ -64,4 +92,18 @@ func main() {
 		log.Fatalf("bot berhenti karena error: %v", err)
 	}
 	log.Print("bot berhenti")
+}
+
+// runCheckLogin menguji kredensial tanpa mengirim kehadiran. Jangan jalankan saat bot aktif,
+// karena keduanya memakai profil browser yang sama.
+func runCheckLogin(ctx context.Context, b *monev.Browser, out string) {
+	log.Print("cek-login: membuka Monev...")
+	shot, err := b.CheckLogin(ctx)
+	if err != nil {
+		log.Fatalf("cek-login gagal: %v", err)
+	}
+	if err := os.WriteFile(out, shot, 0o600); err != nil {
+		log.Fatalf("cek-login berhasil, tapi gagal menyimpan screenshot: %v", err)
+	}
+	log.Printf("cek-login berhasil; screenshot halaman riwayat disimpan di %s", out)
 }

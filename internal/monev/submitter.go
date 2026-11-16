@@ -21,11 +21,11 @@ type Submitter interface {
 	Submit(ctx context.Context, date time.Time, lb ai.Logbook) (Result, error)
 }
 
-var ErrNotImplemented = errors.New("pengiriman ke Monev belum diimplementasikan: endpoint API Monev belum diketahui")
+var ErrNoCredentials = errors.New("pengiriman ke Monev belum aktif: isi SIAPKERJA_EMAIL dan SIAPKERJA_PASSWORD di .env lalu restart bot")
 
-// Unimplemented dipakai sampai alur API/browser Monev selesai dipetakan.
-type Unimplemented struct{}
+// Disabled dipakai bila kredensial SIAPkerja belum diisi; draf tetap bisa disusun.
+type Disabled struct{}
 
-func (Unimplemented) Submit(context.Context, time.Time, ai.Logbook) (Result, error) {
-	return Result{}, ErrNotImplemented
+func (Disabled) Submit(context.Context, time.Time, ai.Logbook) (Result, error) {
+	return Result{}, ErrNoCredentials
 }

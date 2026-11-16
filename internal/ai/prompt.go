@@ -6,8 +6,8 @@ import (
 	"unicode/utf8"
 )
 
-// MinAktivitasChars adalah batas minimal karakter Uraian Aktivitas di Monev.
-const MinAktivitasChars = 100
+// MinFieldChars adalah batas minimal karakter setiap kolom logbook di form Monev.
+const MinFieldChars = 100
 
 // Logbook adalah tiga kolom laporan harian Monev MagangHub.
 type Logbook struct {
@@ -17,30 +17,27 @@ type Logbook struct {
 }
 
 func (l Logbook) Validate() error {
-	var missing []string
-	if strings.TrimSpace(l.Aktivitas) == "" {
-		missing = append(missing, "aktivitas")
+	var problems []string
+	for _, f := range []struct{ name, value string }{
+		{"aktivitas", l.Aktivitas},
+		{"pembelajaran", l.Pembelajaran},
+		{"kendala", l.Kendala},
+	} {
+		if n := utf8.RuneCountInString(strings.TrimSpace(f.value)); n < MinFieldChars {
+			problems = append(problems, fmt.Sprintf("%s %d karakter", f.name, n))
+		}
 	}
-	if strings.TrimSpace(l.Pembelajaran) == "" {
-		missing = append(missing, "pembelajaran")
-	}
-	if strings.TrimSpace(l.Kendala) == "" {
-		missing = append(missing, "kendala")
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("kolom kosong: %s", strings.Join(missing, ", "))
-	}
-	if n := utf8.RuneCountInString(l.Aktivitas); n < MinAktivitasChars {
-		return fmt.Errorf("aktivitas hanya %d karakter, minimal %d", n, MinAktivitasChars)
+	if len(problems) > 0 {
+		return fmt.Errorf("setiap kolom minimal %d karakter (%s)", MinFieldChars, strings.Join(problems, ", "))
 	}
 	return nil
 }
 
 const systemPrompt = `Kamu adalah asisten profesional yang bertugas menyusun laporan harian (logbook) peserta Program Pemagangan Nasional Kemnaker RI.
 
-Diberikan catatan singkat kegiatan pengguna, ubah menjadi JSON dengan tepat tiga kunci:
+Diberikan catatan singkat kegiatan pengguna, ubah menjadi JSON dengan tepat tiga kunci. SETIAP kolom wajib minimal 100 karakter:
 {
-  "aktivitas": "Penjelasan detail kegiatan kerja harian. Bahasa baku, profesional, dan minimal 100 karakter.",
+  "aktivitas": "Penjelasan detail kegiatan kerja harian. Bahasa baku dan profesional.",
   "pembelajaran": "Keterampilan teknis, wawasan bisnis, atau soft skill baru yang dipelajari hari ini.",
   "kendala": "Hambatan atau tantangan yang dihadapi serta solusi penyelesaiannya (jika tidak ada kendala, jelaskan bahwa alur kerja berjalan lancar)."
 }

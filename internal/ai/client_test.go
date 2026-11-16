@@ -20,23 +20,37 @@ func TestParseLogbookStripsCodeFence(t *testing.T) {
 	}
 }
 
-func TestValidateMinChars(t *testing.T) {
-	lb := Logbook{Aktivitas: "pendek", Pembelajaran: "x", Kendala: "y"}
-	if err := lb.Validate(); err == nil {
-		t.Fatal("aktivitas < 100 karakter seharusnya ditolak")
+func validLogbook() Logbook {
+	return Logbook{
+		Aktivitas:    strings.Repeat("a", MinFieldChars),
+		Pembelajaran: strings.Repeat("p", MinFieldChars),
+		Kendala:      strings.Repeat("k", MinFieldChars),
 	}
-	lb.Aktivitas = strings.Repeat("a", MinAktivitasChars)
-	if err := lb.Validate(); err != nil {
+}
+
+// Monev mewajibkan minimal 100 karakter di setiap kolom, bukan hanya aktivitas.
+func TestValidateMinCharsEveryField(t *testing.T) {
+	if err := validLogbook().Validate(); err != nil {
 		t.Fatal(err)
+	}
+	for _, mutate := range []func(*Logbook){
+		func(l *Logbook) { l.Aktivitas = "pendek" },
+		func(l *Logbook) { l.Pembelajaran = "pendek" },
+		func(l *Logbook) { l.Kendala = "pendek" },
+	} {
+		lb := validLogbook()
+		mutate(&lb)
+		if err := lb.Validate(); err == nil {
+			t.Errorf("kolom < %d karakter seharusnya ditolak: %+v", MinFieldChars, lb)
+		}
 	}
 }
 
 // Jawaban pertama terlalu pendek, client harus meminta perbaikan sekali lalu menerima jawaban kedua.
 func TestDraftRetriesOnInvalidAnswer(t *testing.T) {
-	answers := []Logbook{
-		{Aktivitas: "pendek", Pembelajaran: "x", Kendala: "y"},
-		{Aktivitas: strings.Repeat("a", MinAktivitasChars), Pembelajaran: "x", Kendala: "y"},
-	}
+	short := validLogbook()
+	short.Kendala = "tidak ada"
+	answers := []Logbook{short, validLogbook()}
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer k" {
@@ -54,7 +68,7 @@ func TestDraftRetriesOnInvalidAnswer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if calls != 2 || len(lb.Aktivitas) != MinAktivitasChars {
-		t.Fatalf("calls=%d aktivitas=%d", calls, len(lb.Aktivitas))
+	if calls != 2 || lb != validLogbook() {
+		t.Fatalf("calls=%d hasil=%+v", calls, lb)
 	}
 }
